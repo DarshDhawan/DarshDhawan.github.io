@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Darsh Dhawan | Linux & Networking Administration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-deep: #0a0a12;
+            --bg-surface: #12121f;
+            --bg-card: #161628;
+            --border: #1e1e3a;
+            --border-hover: #9d4edd;
+            --text-primary: #e8e8f0;
+            --text-secondary: #8888aa;
+            --text-dim: #555577;
+            --accent: #9d4edd;
+            --accent-neon: #bf00ff;
+            --accent-light: #d8b4fe;
+            --terminal-green: #00ff41;
+            --terminal-prompt: #9d4edd;
+            --danger: #ff0040;
+            --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+            --font-sans: 'Inter', -apple-system, sans-serif;
+        }
+
+        html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--accent) var(--bg-deep); }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-deep); }
+        ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+
+        body {
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ===== SCANNING LINE ===== */
+        #scan-line {
+            position: fixed; top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-neon), transparent);
+            box-shadow: 0 0 20px var(--accent-neon), 0 0 60px var(--accent);
+            z-index: 9999; pointer-events: none;
+            animation: scanDown 1.5s ease-in-out forwards;
+        }
+        @keyframes scanDown {
+            0% { top: -2px; opacity: 1; }
+            100% { top: 100vh; opacity: 0; }
+        }
+
+        /* ===== NETWORK CANVAS ===== */
+        #matrix-canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0; opacity: 0.6; /* Brighter than matrix to show connections */
+        }
+
+        /* ===== NAVIGATION ===== */
+        nav {
+            position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
+            padding: 16px 32px; display: flex; justify-content: space-between; align-items: center;
+            transition: background 0.3s, backdrop-filter 0.3s;
+        }
+        nav.scrolled {
+            background: rgba(10, 10, 18, 0.92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-logo {
+            font-family: var(--font-mono); font-weight: 700; font-size: 14px;
+            color: var(--accent); text-decoration: none; letter-spacing: 2px;
+        }
+        .nav-links { display: flex; gap: 24px; list-style: none; }
+        .nav-links a {
+            font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);
+            text-decoration: none; letter-spacing: 1px; text-transform: lowercase;
+            transition: color 0.2s, text-shadow 0.2s;
+        }
+        .nav-links a::before { content: '$ '; color: var(--text-dim); }
+        .nav-links a:hover {
+            color: var(--accent-neon); text-shadow: 0 0 10px rgba(191, 0, 255, 0.5);
+        }
+        .nav-right { display: flex; align-items: center; gap: 8px; }
+        .nav-btn {
+            font-family: var(--font-mono); font-size: 14px; color: var(--text-dim);
+            cursor: pointer; background: none; border: none; padding: 4px 8px;
+            transition: color 0.2s; position: relative;
+        }
+        .nav-btn:hover { color: var(--accent); }
+        .light-tooltip {
+            display: none; position: absolute; top: 100%; right: 0; margin-top: 8px;
+            background: var(--bg-card); border: 1px solid var(--danger); border-radius: 4px;
+            padding: 6px 10px; font-size: 10px; color: var(--danger); white-space: nowrap; z-index: 100;
+        }
+        .nav-btn:hover .light-tooltip { display: block; }
+
+        /* ===== HERO ===== */
+        #hero {
+            position: relative; min-height: 100vh; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; padding: 120px 32px 80px;
+        }
+        .terminal-window {
+            position: relative; z-index: 1; background: var(--bg-surface);
+            border: 1px solid var(--border); border-radius: 8px; width: 100%; max-width: 700px;
+            overflow: hidden; box-shadow: 0 0 60px rgba(157, 78, 221, 0.08);
+        }
+        .terminal-header {
+            display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+            background: var(--bg-card); border-bottom: 1px solid var(--border);
+        }
+        .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .terminal-dot.red { background: #ff5f57; }
+        .terminal-dot.yellow { background: #ffbd2e; }
+        .terminal-dot.green { background: #28c840; }
+        .terminal-title { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-left: 8px; }
+        .terminal-body {
+            padding: 24px; font-family: var(--font-mono); font-size: 14px;
+            line-height: 1.9; min-height: 130px;
+        }
+        .terminal-line { display: block; opacity: 0; }
+        .terminal-line.visible { opacity: 1; }
+        .prompt { color: var(--terminal-prompt); }
+        .command { color: var(--text-primary); }
+        .output { color: var(--text-secondary); padding-left: 16px; }
+        .cursor {
+            display: inline-block; width: 8px; height: 16px; background: var(--accent-neon);
+            vertical-align: text-bottom; animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .hero-name {
+            position: relative; z-index: 1; font-family: var(--font-mono); font-weight: 700;
+            font-size: clamp(28px, 5vw, 52px); letter-spacing: 6px; text-transform: uppercase;
+            color: var(--text-primary); margin-top: 40px; text-align: center;
+            opacity: 0; transform: translateY(20px); transition: opacity 0.8s, transform 0.8s;
+        }
+        .hero-name.visible { opacity: 1; transform: translateY(0); }
+        .hero-tagline {
+            position: relative; z-index: 1; font-family: var(--font-mono); font-size: 13px;
+            color: var(--text-dim); letter-spacing: 3px; text-transform: uppercase;
+            margin-top: 12px; text-align: center; opacity: 0; transition: opacity 0.8s 0.3s;
+        }
+        .hero-tagline.visible { opacity: 1; }
+        .scroll-indicator {
+            position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 1;
+            font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); letter-spacing: 2px;
+            animation: float 2s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(-8px); }
+        }
+
+        /* ===== SECTIONS ===== */
+        .section { padding: 100px 32px; max-width: 900px; margin: 0 auto; }
+        .section-header { margin-bottom: 48px; }
+        .section-command { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+        .section-title {
+            font-family: var(--font-mono); font-weight: 700; font-size: clamp(24px, 4vw, 32px);
+            letter-spacing: 4px; text-transform: uppercase; color: var(--text-primary);
+            position: relative; display: inline-block;
+        }
+        .section-title::after {
+            content: ''; position: absolute; bottom: -8px; left: 0;
+            width: 60px; height: 2px; background: var(--accent);
+        }
+
+        /* ===== SCROLL REVEAL ===== */
+        .reveal {
+            opacity: 0; transform: translateY(50px);
+            transition: opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.6s, transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.6s;
+        }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+
+        /* ===== DIVIDERS ===== */
+        .section-divider { max-width: 900px; margin: 0 auto; padding: 0 32px; }
+        .divider-line { border: none; height: 1px; background: var(--border); position: relative; }
+        .divider-line::before {
+            content: '//'; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            background: var(--bg-deep); padding: 0 12px; font-family: var(--font-mono);
+            font-size: 11px; color: var(--text-dim);
+        }
+
+        /* ===== ABOUT ===== */
+        .about-terminal {
+            background: var(--bg-surface); border: 1px solid var(--border);
+            border-radius: 8px; overflow: hidden; margin-bottom: 32px;
+        }
+        .about-content {
+            padding: 24px; font-family: var(--font-mono); font-size: 13px;
+            line-height: 2; color: var(--text-secondary); white-space: pre-wrap; word-wrap: break-word;
+        }
+        .about-content .hl { color: var(--accent-light); }
+
+        .photo-slot { display: none; align-items: center; gap: 32px; margin-bottom: 32px; }
+        .photo-slot.active { display: flex; }
+        .photo-frame {
+            width: 200px; height: 200px; border: 2px solid var(--accent);
+            border-radius: 8px; overflow: hidden; position: relative; flex-shrink: 0;
+        }
+        .photo-frame img {
+            width: 100%; height: 100%; object-fit: cover;
+            filter: grayscale(0.5) contrast(1.2) hue-rotate(20deg); transition: filter 0.3s;
+        }
+        .photo-frame:hover img { filter: grayscale(0) contrast(1.4) hue-rotate(40deg) brightness(0.8); }
+        .photo-frame::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(157,78,221,0.03) 2px, rgba(157,78,221,0.03) 4px);
+            pointer-events: none;
+        }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); max-width: 500px; margin: 0 auto; gap: 16px; }
+        .stat-card {
+            background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;
+            padding: 20px; text-align: center; transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+        }
+        .stat-card:hover { 
+            border-color: var(--accent); 
+            box-shadow: 0 0 20px rgba(157,78,221,0.1); 
+            transform: translateY(-3px);
+        }
+        .stat-value { font-family: var(--font-mono); font-weight: 700; font-size: 24px; color: var(--accent-neon); }
+        .stat-label {
+            font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+            margin-top: 4px; text-transform: uppercase; letter-spacing: 1px;
+        }
+
+        /* ===== SKILLS ===== */
+        .skills-tree {
+            background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;
+            padding: 24px; font-family: var(--font-mono); font-size: 12px; line-height: 2;
+            color: var(--text-secondary); overflow-x: auto; margin-bottom: 40px;
+        }
+        .skills-tree .dir { color: var(--accent-light); font-weight: 700; }
+        .skills-tree .file { color: var(--text-secondary); }
+        .skills-tree .t { color: var(--text-dim); }
+        .skills-tree .cmt { color: var(--text-dim); font-style: italic; }
+
+        .skills-badges { display: flex; flex-wrap: wrap; gap: 10px; }
+        .skill-badge {
+            font-family: var(--font-mono); font-size: 11px; padding: 6px 14px;
+            border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary);
+            background: var(--bg-surface); cursor: default; transition: all 0.3s; letter-spacing: 0.5px;
+        }
+        .skill-badge:hover {
+            border-color: var(--accent-neon); color: var(--accent-neon);
+            box-shadow: 0 0 12px rgba(191,0,255,0.2); transform: translateY(-1px);
+        }
+        .skill-badge.pulse { animation: badgePulse 0.6s ease; }
+        @keyframes badgePulse {
+            0% { box-shadow: 0 0 0 0 rgba(191,0,255,0.4); }
+            50% { box-shadow: 0 0 16px 4px rgba(191,0,255,0.3); }
+            100% { box-shadow: 0 0 0 0 rgba(191,0,255,0); }
+        }
+        .skill-badge.offensive { border-left: 3px solid var(--danger); }
+        .skill-badge.defensive { border-left: 3px solid var(--terminal-green); }
+        .skill-badge.networking { border-left: 3px solid #00b4d8; }
+        .skill-badge.tools { border-left: 3px solid var(--accent); }
+        .skill-badge.languages { border-left: 3px solid #ffd60a; }
+        .skill-badge.datascience { border-left: 3px solid #fb8500; }
+
+        /* ===== PROJECTS ===== */
+        .project-card {
+            background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;
+            padding: 32px; margin-bottom: 24px; 
+            transition: border-color 0.4s, box-shadow 0.4s;
+            position: relative; overflow: hidden;
+            transform-style: preserve-3d;
+            will-change: transform;
+        }
+        .project-card::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+            background: var(--accent); opacity: 0; transition: opacity 0.4s; z-index: 2;
+        }
+        .project-card:hover { border-color: var(--accent); box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 30px rgba(157,78,221,0.15); }
+        .project-card:hover::before { opacity: 1; }
+
+        .project-card .spotlight {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at var(--mx) var(--my), rgba(191,0,255,0.15), transparent 40%);
+            opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 0;
+        }
+        .project-card:hover .spotlight { opacity: 1; }
+        .project-card > * { position: relative; z-index: 1; }
+
+        .project-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .severity-badge {
+            font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+            padding: 4px 10px; border-radius: 3px; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .severity-critical { background: rgba(255,0,64,0.15); color: var(--danger); border: 1px solid rgba(255,0,64,0.3); }
+        .severity-high { background: rgba(255,165,0,0.15); color: #ffa500; border: 1px solid rgba(255,165,0,0.3); }
+        .severity-medium { background: rgba(157,78,221,0.15); color: var(--accent-light); border: 1px solid rgba(157,78,221,0.3); }
+        .project-type { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+        .project-title { font-family: var(--font-mono); font-weight: 700; font-size: 20px; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 1px; }
+        .project-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.8; margin-bottom: 20px; }
+        .project-details { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); line-height: 2.2; margin-bottom: 20px; padding-left: 16px; }
+        .project-details .dp { color: var(--accent); }
+        .project-stack { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+        .stack-tag {
+            font-family: var(--font-mono); font-size: 10px; padding: 3px 10px;
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 3px;
+            color: var(--text-secondary); letter-spacing: 0.5px;
+        }
+        .project-link {
+            font-family: var(--font-mono); font-size: 12px; color: var(--accent-neon);
+            text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+            transition: text-shadow 0.2s;
+        }
+        .project-link:hover { text-shadow: 0 0 10px rgba(191,0,255,0.5); }
+        .project-link .arrow { transition: transform 0.2s; display: inline-block; }
+        .project-link:hover .arrow { transform: translateX(4px); }
+
+        /* ===== GITHUB ===== */
+        .git-block { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .git-log { padding: 24px; font-family: var(--font-mono); font-size: 12px; line-height: 2.4; }
+        .git-hash { color: var(--accent); }
+        .git-msg { color: var(--text-secondary); }
+        .git-meta-text { color: var(--text-dim); }
+        .github-cta {
+            display: inline-flex; align-items: center; gap: 8px; margin-top: 24px;
+            font-family: var(--font-mono); font-size: 13px; color: var(--accent-neon);
+            text-decoration: none; padding: 10px 20px; border: 1px solid var(--accent);
+            border-radius: 4px; transition: all 0.3s;
+        }
+        .github-cta:hover { background: rgba(157,78,221,0.1); box-shadow: 0 0 20px rgba(157,78,221,0.2); }
+
+        /* ===== CONTACT ===== */
+        .ping-block {
+            background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;
+            padding: 32px; font-family: var(--font-mono); font-size: 13px; line-height: 2.2;
+        }
+        .ping-block a { color: var(--accent-neon); text-decoration: none; transition: text-shadow 0.2s; }
+        .ping-block a:hover { text-shadow: 0 0 10px rgba(191,0,255,0.5); }
+        .contact-links { display: flex; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
+        .contact-btn {
+            font-family: var(--font-mono); font-size: 12px; padding: 10px 20px;
+            border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary);
+            background: var(--bg-card); text-decoration: none; display: inline-flex;
+            align-items: center; gap: 8px; transition: all 0.3s;
+        }
+        .contact-btn:hover { border-color: var(--accent); color: var(--accent-neon); box-shadow: 0 0 15px rgba(157,78,221,0.15); }
+
+        /* ===== FOOTER ===== */
+        footer {
+            padding: 48px 32px; text-align: center; border-top: 1px solid var(--border);
+            font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); line-height: 2;
+        }
+        .footer-ascii { color: var(--accent); font-size: 9px; line-height: 1.15; margin-bottom: 20px; opacity: 0.5; white-space: pre; }
+
+        /* ===== GLITCH ===== */
+        .glitch { position: relative; cursor: default; }
+        .glitch:hover { animation: glitch 0.3s ease; }
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); text-shadow: -2px 0 var(--accent-neon), 2px 0 var(--terminal-green); }
+            40% { transform: translate(-2px, -2px); text-shadow: 2px 0 var(--accent-neon), -2px 0 var(--terminal-green); }
+            60% { transform: translate(2px, 2px); text-shadow: -1px 0 var(--accent-neon), 1px 0 var(--terminal-green); }
+            80% { transform: translate(2px, -1px); text-shadow: 1px 0 var(--accent-neon), -1px 0 var(--terminal-green); }
+            100% { transform: translate(0); text-shadow: none; }
+        }
+
+        /* ===== EASTER EGG TERMINAL ===== */
+        #easter-terminal {
+            position: fixed; bottom: 16px; right: 16px; width: 440px; max-height: 320px;
+            background: var(--bg-surface); border: 1px solid var(--accent); border-radius: 8px;
+            z-index: 2000; overflow: hidden; box-shadow: 0 0 30px rgba(157,78,221,0.2);
+            transform: translateY(120%); transition: transform 0.3s ease;
+        }
+        #easter-terminal.open { transform: translateY(0); }
+        .easter-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 16px; background: var(--bg-card); border-bottom: 1px solid var(--border);
+            cursor: pointer; user-select: none;
+        }
+        .easter-header-left { display: flex; align-items: center; gap: 8px; }
+        .easter-title { font-family: var(--font-mono); font-size: 11px; color: var(--accent-light); }
+        .easter-close {
+            font-family: var(--font-mono); font-size: 12px; color: var(--text-dim);
+            background: none; border: none; cursor: pointer; padding: 2px 6px;
+        }
+        .easter-close:hover { color: var(--danger); }
+        .easter-body {
+            padding: 12px 16px; font-family: var(--font-mono); font-size: 12px;
+            line-height: 1.8; max-height: 220px; overflow-y: auto; color: var(--text-secondary);
+        }
+        .easter-input-wrap { padding: 0 16px 12px; }
+        .easter-input-line { display: flex; align-items: center; gap: 4px; }
+        .easter-prompt { color: var(--accent); font-family: var(--font-mono); font-size: 12px; }
+        #easter-input {
+            flex: 1; background: none; border: none; outline: none; color: var(--text-primary);
+            font-family: var(--font-mono); font-size: 12px; caret-color: var(--accent-neon);
+        }
+        .e-out { color: var(--text-secondary); }
+        .e-err { color: var(--danger); }
+        .e-ok { color: var(--terminal-green); }
+        .e-hl { color: var(--accent-light); }
+    </style>
+</head>
+<body>
+
+<!-- Scanning Line -->
+<div id="scan-line"></div>
+
+<!-- Navigation -->
+<nav id="navbar">
+    <a href="#hero" class="nav-logo">DD://</a>
+    <ul class="nav-links">
+        <li><a href="#about">about</a></li>
+        <li><a href="#skills">skills</a></li>
+        <li><a href="#projects">projects</a></li>
+        <li><a href="#github">github</a></li>
+        <li><a href="#contact">contact</a></li>
+    </ul>
+    <div class="nav-right">
+        <button class="nav-btn" onclick="lightModeJoke()">☀<span class="light-tooltip">light mode? lol</span></button>
+        <button class="nav-btn" onclick="toggleEaster()" title="Press / to open">_&gt;</button>
+    </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<section id="hero">
+    <canvas id="matrix-canvas"></canvas>
+    <div class="terminal-window">
+        <div class="terminal-header">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-title">darsh@portfolio:~</span>
+        </div>
+        <div class="terminal-body" id="hero-terminal"></div>
+    </div>
+    <h1 class="hero-name" id="hero-name">DARSH DHAWAN</h1>
+    <p class="hero-tagline" id="hero-tagline">Linux &amp; Networking Administration</p>
+    <div class="scroll-indicator">[ SCROLL ]</div>
+</section>
+
+<div class="section-divider"><hr class="divider-line"></div>
+
+<!-- ===== ABOUT ===== -->
+<section id="about" class="section">
+    <div class="section-header reveal">
+        <div class="section-command">$ cat about.txt</div>
+        <h2 class="section-title glitch">About</h2>
+    </div>
+
+    <!-- MODULAR: Add class "active" and your image src when ready -->
+    <div class="photo-slot" id="photo-slot">
+        <div class="photo-frame">
+            <img src="YOUR_PHOTO.jpg" alt="Darsh Dhawan">
+        </div>
+    </div>
+
+    <div class="about-terminal reveal" style="transition-delay:0.1s">
+        <div class="terminal-header">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-title">about.txt — readonly</span>
+        </div>
+        <div class="about-content"><span class="hl">Results-driven Computer Science graduate</span> with hands-on expertise in <span class="hl">cybersecurity</span>, <span class="hl">Linux administration</span>, and data science.
+
+Experienced in configuring and hardening network services (SSH, Apache, NFS), performing vulnerability assessments, and building home-lab environments for continuous security learning.
+
+Proficient in Python, Docker, and exploratory data analysis. I break things to understand how to fix them.</div>
+    </div>
+
+    <div class="stats-grid reveal" style="transition-delay:0.2s">
+        <div class="stat-card">
+            <div class="stat-value">ACTIVE</div>
+            <div class="stat-label">Home Lab</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">5+</div>
+            <div class="stat-label">Labs Built</div>
+        </div>
+    </div>
+</section>
+
+<div class="section-divider"><hr class="divider-line"></div>
+
+<!-- ===== SKILLS ===== -->
+<section id="skills" class="section">
+    <div class="section-header reveal">
+        <div class="section-command">$ ls /skills/</div>
+        <h2 class="section-title glitch">Skills</h2>
+    </div>
+
+    <div class="skills-tree reveal" style="transition-delay:0.1s">
+<span class="dir">/skills/</span><br>
+<span class="t">├── </span><span class="dir">offensive/</span><br>
+<span class="t">│   ├── </span><span class="file">ethical_hacking</span><br>
+<span class="t">│   └── </span><span class="file">vulnerability_assessment</span><br>
+<span class="t">├── </span><span class="dir">defensive/</span><br>
+<span class="t">│   ├── </span><span class="file">linux_security</span><br>
+<span class="t">│   ├── </span><span class="file">apparmor</span><br>
+<span class="t">│   ├── </span><span class="file">selinux</span><br>
+<span class="t">│   └── </span><span class="file">service_hardening</span><br>
+<span class="t">├── </span><span class="dir">networking/</span><br>
+<span class="t">│   ├── </span><span class="file">tcp/ip</span><br>
+<span class="t">│   ├── </span><span class="file">dns</span><br>
+<span class="t">│   ├── </span><span class="file">dhcp</span><br>
+<span class="t">│   ├── </span><span class="file">ssh</span><br>
+<span class="t">│   ├── </span><span class="file">http/https</span><br>
+<span class="t">│   ├── </span><span class="file">nfs</span><br>
+<span class="t">│   ├── </span><span class="file">ip_link</span><br>
+<span class="t">│   ├── </span><span class="file">ip_route</span><br>
+<span class="t">│   └── </span><span class="file">ip_addr</span><br>
+<span class="t">├── </span><span class="dir">tools/</span><br>
+<span class="t">│   ├── </span><span class="file">docker</span><br>
+<span class="t">│   ├── </span><span class="file">virtualbox</span><br>
+<span class="t">│   ├── </span><span class="file">git</span><br>
+<span class="t">│   ├── </span><span class="file">apache</span><br>
+<span class="t">│   └── </span><span class="file">mysql</span><br>
+<span class="t">├── </span><span class="dir">languages/</span><br>
+<span class="t">│   ├── </span><span class="file">python</span><br>
+<span class="t">│   └── </span><span class="file">c</span><br>
+<span class="t">└── </span><span class="dir">data_science/</span> <span class="cmt">// secondary</span><br>
+<span class="t">    ├── </span><span class="file">pandas</span><br>
+<span class="t">    ├── </span><span class="file">scikit-learn</span><br>
+<span class="t">    └── </span><span class="file">matplotlib</span>
+    </div>
+
+    <div class="skills-badges reveal" style="transition-delay:0.2s">
+        <span class="skill-badge offensive">Ethical Hacking</span>
+        <span class="skill-badge offensive">Vulnerability Assessment</span>
+        <span class="skill-badge defensive">Linux Security</span>
+        <span class="skill-badge defensive">AppArmor</span>
+        <span class="skill-badge defensive">SELinux</span>
+        <span class="skill-badge defensive">Service Hardening</span>
+        <span class="skill-badge networking">TCP/IP</span>
+        <span class="skill-badge networking">DNS</span>
+        <span class="skill-badge networking">DHCP</span>
+        <span class="skill-badge networking">SSH</span>
+        <span class="skill-badge networking">HTTP/HTTPS</span>
+        <span class="skill-badge networking">NFS</span>
+        <span class="skill-badge networking">ip link</span>
+        <span class="skill-badge networking">ip route</span>
+        <span class="skill-badge networking">ip addr</span>
+        <span class="skill-badge tools">Docker</span>
+        <span class="skill-badge tools">VirtualBox</span>
+        <span class="skill-badge tools">Git</span>
+        <span class="skill-badge tools">Apache</span>
+        <span class="skill-badge tools">MySQL</span>
+        <span class="skill-badge languages">Python</span>
+        <span class="skill-badge languages">C</span>
+        <span class="skill-badge datascience">Pandas</span>
+        <span class="skill-badge datascience">Scikit-learn</span>
+        <span class="skill-badge datascience">Matplotlib</span>
+    </div>
+</section>
+
+<div class="section-divider"><hr class="divider-line"></div>
+
+<!-- ===== PROJECTS ===== -->
+<section id="projects" class="section">
+    <div class="section-header reveal">
+        <div class="section-command">$ ./projects --list</div>
+        <h2 class="section-title glitch">Projects</h2>
+    </div>
+
+    <!-- Project 1 -->
+    <div class="project-card reveal" style="transition-delay:0.1s">
+        <div class="spotlight"></div>
+        <div class="project-meta">
+            <span class="severity-badge severity-critical">[CRITICAL]</span>
+            <span class="project-type">System Administration · Cybersecurity</span>
+        </div>
+        <h3 class="project-title">Linux Home Lab &amp; Network Services</h3>
+        <p class="project-desc">Built a self-hosted cybersecurity lab from scratch using virtualized Debian and Kali instances. Configured SSH with key-based auth, deployed Apache with hardened configs, and set up NFS for cross-VM shared storage. Simulates real-world sysadmin and blue team operations.</p>
+        <div class="project-details">
+            <span class="dp">▸</span> Configured and managed SSH, Apache, and NFS in a virtualized network<br>
+            <span class="dp">▸</span> Performed user management, service troubleshooting, and hardening<br>
+            <span class="dp">▸</span> Hands-on Linux networking, server deployment, and security monitoring
+        </div>
+        <div class="project-stack">
+            <span class="stack-tag">Kali Linux</span>
+            <span class="stack-tag">Debian</span>
+            <span class="stack-tag">SSH</span>
+            <span class="stack-tag">Apache</span>
+            <span class="stack-tag">NFS</span>
+            <span class="stack-tag">VirtualBox</span>
+        </div>
+        <a href="https://github.com/DarshDhawan" target="_blank" class="project-link">View Repo <span class="arrow">→</span></a>
+    </div>
+
+    <!-- Project 2 -->
+    <div class="project-card reveal" style="transition-delay:0.2s">
+        <div class="spotlight"></div>
+        <div class="project-meta">
+            <span class="severity-badge severity-high">[HIGH]</span>
+            <span class="project-type">Security Labs · Container &amp; Network</span>
+        </div>
+        <h3 class="project-title">Cybersecurity Labs</h3>
+        <p class="project-desc">A collection of isolated lab environments for hands-on security practice. Covers Docker container security, NFS access control, a Python-built web server from scratch, and Apache configuration drills. Each lab is self-contained and documented for reproducibility.</p>
+        <div class="project-details">
+            <span class="dp">▸</span> docker_lab/ — Linux container security exercises<br>
+            <span class="dp">▸</span> nfs-home-lab/ — NFS setup with access control<br>
+            <span class="dp">▸</span> python-web-server/ — HTTP server built from scratch<br>
+            <span class="dp">▸</span> webserver-basics-lab/ — Apache configuration guide
+        </div>
+        <div class="project-stack">
+            <span class="stack-tag">Docker</span>
+            <span class="stack-tag">Linux</span>
+            <span class="stack-tag">Python</span>
+            <span class="stack-tag">Apache</span>
+            <span class="stack-tag">NFS</span>
+        </div>
+        <a href="https://github.com/DarshDhawan/Cybersecurity-Labs" target="_blank" class="project-link">View Repo <span class="arrow">→</span></a>
+    </div>
+
+    <!-- Project 3 -->
+    <div class="project-card reveal" style="transition-delay:0.3s">
+        <div class="spotlight"></div>
+        <div class="project-meta">
+            <span class="severity-badge severity-medium">[MEDIUM]</span>
+            <span class="project-type">Embedded Systems · IoT</span>
+        </div>
+        <h3 class="project-title">ESP32 Accident Detection System</h3>
+        <p class="project-desc">Embedded systems project using ESP32 microcontroller with sound-based impact detection. Integrated hardware sensors with real-time monitoring logic to trigger automated alerts on impact. Demonstrates cross-stack capability — from low-level C to hardware integration.</p>
+        <div class="project-details">
+            <span class="dp">▸</span> Sound-based event detection with ESP32<br>
+            <span class="dp">▸</span> Real-time sensor monitoring with automated alert triggers<br>
+            <span class="dp">▸</span> System design, functional testing, and iterative implementation
+        </div>
+        <div class="project-stack">
+            <span class="stack-tag">C</span>
+            <span class="stack-tag">ESP32</span>
+            <span class="stack-tag">IoT</span>
+            <span class="stack-tag">Hardware Sensors</span>
+        </div>
+        <a href="https://github.com/DarshDhawan" target="_blank" class="project-link">View Repo <span class="arrow">→</span></a>
+    </div>
+</section>
+
+<div class="section-divider"><hr class="divider-line"></div>
+
+<!-- ===== GITHUB ===== -->
+<section id="github" class="section">
+    <div class="section-header reveal">
+        <div class="section-command">$ git log --oneline</div>
+        <h2 class="section-title glitch">GitHub</h2>
+    </div>
+
+    <div class="git-block reveal" style="transition-delay:0.1s">
+        <div class="terminal-header">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-title">DarshDhawan/Cybersecurity-Labs — main</span>
+        </div>
+        <div class="git-log">
+            <span class="git-hash">a1b2c3d</span> <span class="git-msg">docker_lab: added container security exercises</span> <span class="git-meta-text">— last week</span><br>
+            <span class="git-hash">e4f5g6h</span> <span class="git-msg">nfs-home-lab: configured NFS with access control</span> <span class="git-meta-text">— 5 days ago</span><br>
+            <span class="git-hash">i7j8k9l</span> <span class="git-msg">python-web-server: basic HTTP server implementation</span> <span class="git-meta-text">— last month</span><br>
+            <span class="git-hash">m0n1o2p</span> <span class="git-msg">webserver-basics-lab: apache configuration guide</span> <span class="git-meta-text">— last month</span><br>
+            <span class="git-hash">q3r4s5t</span> <span class="git-msg">initial commit</span> <span class="git-meta-text">— 2 months ago</span>
+        </div>
+    </div>
+
+    <a href="https://github.com/DarshDhawan" target="_blank" class="github-cta reveal" style="transition-delay:0.2s">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        github.com/DarshDhawan
+    </a>
+</section>
+
+<div class="section-divider"><hr class="divider-line"></div>
+
+<!-- ===== CONTACT ===== -->
+<section id="contact" class="section">
+    <div class="section-header reveal">
+        <div class="section-command">$ ping darsh@portfolio</div>
+        <h2 class="section-title glitch">Contact</h2>
+    </div>
+
+    <div class="ping-block reveal" style="transition-delay:0.1s">
+        PING darsh.dhawan (portfolio.local): 56 data bytes<br>
+        64 bytes from darsh: icmp_seq=1 ttl=64 time=0.042 ms<br>
+        64 bytes from darsh: icmp_seq=2 ttl=64 time=0.038 ms<br>
+        <br>
+        --- darsh.dhawan ping statistics ---<br>
+        2 packets transmitted, 2 received, 0% packet loss<br>
+        <span style="color:var(--terminal-green)">Status: Accepting connections</span><br>
+        <br>
+        Email: <a href="mailto:darshdhawan987@gmail.com">darshdhawan987@gmail.com</a>
+    </div>
+
+    <div class="contact-links reveal" style="transition-delay:0.2s">
+        <a href="mailto:darshdhawan987@gmail.com" class="contact-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            Email
+        </a>
+        <a href="https://linkedin.com/in/darshdhawan" target="_blank" class="contact-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            LinkedIn
+        </a>
+        <a href="https://github.com/DarshDhawan" target="_blank" class="contact-btn">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            GitHub
+        </a>
+    </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+    <div class="footer-ascii">    ╔═══════════════════════════════════╗
+    ║  ██████╗ ██████╗ ███╗   ██╗██████╗  ║
+    ║  ██╔══██╗██╔══██╗████╗  ██║██╔══██╗ ║
+    ║  ██████╔╝██║  ██║██╔██╗ ██║██║  ██║ ║
+    ║  ██╔═══╝ ██║  ██║██║╚██╗██║██║  ██║ ║
+    ║  ██║     ██████╔╝██║ ╚████║██████╔╝ ║
+    ║  ╚═╝     ╚═════╝ ╚═╝  ╚═══╝╚═════╝  ║
+    ╚═══════════════════════════════════╝</div>
+    © 2024 Darsh Dhawan<br>
+    Built with raw HTML, CSS &amp; JS. No frameworks. No dependencies.<br>
+    Just like my labs.
+</footer>
+
+<!-- ===== EASTER EGG TERMINAL ===== -->
+<div id="easter-terminal">
+    <div class="easter-header" onclick="toggleEaster()">
+        <div class="easter-header-left">
+            <span class="terminal-dot red" style="width:8px;height:8px"></span>
+            <span class="terminal-dot yellow" style="width:8px;height:8px"></span>
+            <span class="terminal-dot green" style="width:8px;height:8px"></span>
+            <span class="easter-title">darsh@portfolio:~</span>
+        </div>
+        <button class="easter-close">✕</button>
+    </div>
+    <div class="easter-body" id="easter-output">
+        <div class="e-out">Type "help" for available commands.</div>
+    </div>
+    <div class="easter-input-wrap">
+        <div class="easter-input-line">
+            <span class="easter-prompt">$&nbsp;</span>
+            <input type="text" id="easter-input" autocomplete="off" spellcheck="false" placeholder="type a command...">
+        </div>
+    </div>
+</div>
+
+<script>
+// ==============================
+// 3D TILT & SPOTLIGHT ON PROJECTS (Smooth Easing)
+// ==============================
+document.querySelectorAll('.project-card').forEach(card => {
+    let targetX = 0, targetY = 0, currentX = 0, currentY = 0, targetScale = 1, currentScale = 1;
+    let isAnimating = false;
+
+    const animate = () => {
+        currentX += (targetX - currentX) * 0.12;
+        currentY += (targetY - currentY) * 0.12;
+        currentScale += (targetScale - currentScale) * 0.12;
+
+        card.style.transform = `perspective(1000px) rotateX(${currentX}deg) rotateY(${currentY}deg) scale(${currentScale})`;
+
+        if (Math.abs(targetX - currentX) < 0.01 && Math.abs(targetY - currentY) < 0.01 && Math.abs(targetScale - currentScale) < 0.001) {
+            card.style.transform = `perspective(1000px) rotateX(${targetX}deg) rotateY(${targetY}deg) scale(${targetScale})`;
+            isAnimating = false;
+            return;
+        }
+        requestAnimationFrame(animate);
+    };
+
+    card.addEventListener('mousemove', (e) => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        targetX = (y - centerY) / 40;
+        targetY = (centerX - x) / 40;
+        targetScale = 1.02;
+        
+        card.style.setProperty('--mx', x + 'px');
+        card.style.setProperty('--my', y + 'px');
+
+        if (!isAnimating) {
+            isAnimating = true;
+            animate();
+        }
+    });
+
+    card.addEventListener('mouseleave', () => {
+        targetX = 0;
+        targetY = 0;
+        targetScale = 1;
+        if (!isAnimating) {
+            isAnimating = true;
+            animate();
+        }
+    });
+});
+
+// ==============================
+// SCROLL REVEAL (RE-TRIGGERS EVERY TIME)
+// ==============================
+const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            
+            if (entry.target.classList.contains('skills-badges')) {
+                entry.target.querySelectorAll('.skill-badge').forEach((b, i) => {
+                    setTimeout(() => {
+                        b.classList.add('pulse');
+                        b.addEventListener('animationend', () => b.classList.remove('pulse'), { once: true });
+                    }, i * 60);
+                });
+            }
+        } else {
+            entry.target.classList.remove('visible');
+        }
+    });
+}, { threshold: 0.15, rootMargin: '0px 0px -50px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+// ==============================
+// ANIMATED STATS COUNTER
+// ==============================
+const statObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const statEl = entry.target.querySelector('.stat-value');
+            const finalText = statEl.innerText;
+            
+            const match = finalText.match(/(\d+\.?\d*)/);
+            if (match) {
+                const target = parseFloat(match[1]);
+                const isDecimal = finalText.includes('.');
+                const suffix = finalText.replace(match[1], '');
+                let current = 0;
+                const step = target / 30;
+                
+                const timer = setInterval(() => {
+                    current += step;
+                    if (current >= target) {
+                        statEl.innerText = (isDecimal ? target.toFixed(1) : target) + suffix;
+                        clearInterval(timer);
+                    } else {
+                        statEl.innerText = (isDecimal ? current.toFixed(1) : Math.floor(current)) + suffix;
+                    }
+                }, 30);
+            }
+            statObserver.unobserve(entry.target);
+        }
+    });
+}, { threshold: 0.5 });
+
+document.querySelectorAll('.stat-card').forEach(card => statObserver.observe(card));
+
+// ==============================
+// INTERACTIVE NETWORK CONSTELLATION
+// ==============================
+const canvas = document.getElementById('matrix-canvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+let mouse = { x: null, y: null, radius: 150 };
+
+function resizeCanvas() {
+    canvas.width = canvas.parentElement.offsetWidth;
+    canvas.height = canvas.parentElement.offsetHeight;
+    initParticles();
+}
+
+function initParticles() {
+    particles = [];
+    const numParticles = Math.floor((canvas.width * canvas.height) / 15000);
+    for (let i = 0; i < numParticles; i++) {
+        particles.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: (Math.random() - 0.5) * 0.5,
+            size: Math.random() * 2 + 1
+        });
+    }
+}
+
+window.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+});
+
+window.addEventListener('mouseout', () => {
+    mouse.x = null;
+    mouse.y = null;
+});
+
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function drawNetwork() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    for (let i = 0; i < particles.length; i++) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        
+        // Bounce off edges
+        if (p.x < 0 || p.x > canvas.width) p.vx = -p.vx;
+        if (p.y < 0 || p.y > canvas.height) p.vy = -p.vy;
+        
+        // Draw particle
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(157, 78, 221, 0.8)';
+        ctx.fill();
+        
+        // Connect to mouse
+        if (mouse.x !== null) {
+            let dx = mouse.x - p.x;
+            let dy = mouse.y - p.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < mouse.radius) {
+                ctx.beginPath();
+                ctx.moveTo(mouse.x, mouse.y);
+                ctx.lineTo(p.x, p.y);
+                ctx.strokeStyle = `rgba(191, 0, 255, ${1 - dist / mouse.radius})`;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+        }
+        
+        // Connect to other particles
+        for (let j = i + 1; j < particles.length; j++) {
+            let p2 = particles[j];
+            let dx = p.x - p2.x;
+            let dy = p.y - p2.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 120) {
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = `rgba(157, 78, 221, ${0.4 - (dist / 120) * 0.4})`;
+                ctx.lineWidth = 0.8;
+                ctx.stroke();
+            }
+        }
+    }
+    requestAnimationFrame(drawNetwork);
+}
+drawNetwork();
+
+// ==============================
+// HERO TYPING ANIMATION
+// ==============================
+const terminalEl = document.getElementById('hero-terminal');
+const heroName = document.getElementById('hero-name');
+const heroTagline = document.getElementById('hero-tagline');
+
+const lines = [
+    { type: 'command', text: 'whoami' },
+    { type: 'output', text: 'darsh dhawan' },
+    { type: 'output', text: 'linux & networking administration' },
+    { type: 'command', text: 'status --check' },
+    { type: 'output', text: 'home-lab: ACTIVE | services: RUNNING | caffeine: CRITICAL' },
+];
+
+let lineIndex = 0, charIndex = 0, currentLineEl = null;
+
+function typeLine() {
+    if (lineIndex >= lines.length) {
+        heroName.classList.add('visible');
+        setTimeout(() => heroTagline.classList.add('visible'), 300);
+        return;
+    }
+    const line = lines[lineIndex];
+    if (charIndex === 0) {
+        currentLineEl = document.createElement('span');
+        currentLineEl.classList.add('terminal-line');
+        terminalEl.appendChild(currentLineEl);
+        if (line.type === 'command') {
+            const p = document.createElement('span'); p.classList.add('prompt'); p.textContent = '$ ';
+            currentLineEl.appendChild(p);
+        }
+        const span = document.createElement('span');
+        span.classList.add(line.type === 'command' ? 'command' : 'output');
+        span.id = 'typing-target';
+        currentLineEl.appendChild(span);
+        currentLineEl.classList.add('visible');
+    }
+    const target = document.getElementById('typing-target');
+    if (!target) return;
+    if (charIndex < line.text.length) {
+        const old = currentLineEl.querySelector('.cursor');
+        if (old) old.remove();
+        target.textContent += line.text[charIndex];
+        charIndex++;
+        const cur = document.createElement('span'); cur.classList.add('cursor');
+        currentLineEl.appendChild(cur);
+        setTimeout(typeLine, line.type === 'command' ? 20 + Math.random() * 20 : 10 + Math.random() * 10);
+    } else {
+        const cur = currentLineEl.querySelector('.cursor');
+        if (cur) cur.remove();
+        target.removeAttribute('id');
+        lineIndex++; charIndex = 0;
+        setTimeout(typeLine, line.type === 'command' ? 120 : 60);
+    }
+}
+setTimeout(typeLine, 800);
+
+// ==============================
+// NAV SCROLL
+// ==============================
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+    navbar.classList.toggle('scrolled', window.scrollY > 80);
+});
+
+// ==============================
+// EASTER EGG
+// ==============================
+const easterTerminal = document.getElementById('easter-terminal');
+const easterOutput = document.getElementById('easter-output');
+const easterInput = document.getElementById('easter-input');
+let easterOpen = false;
+
+function toggleEaster() {
+    easterOpen = !easterOpen;
+    easterTerminal.classList.toggle('open', easterOpen);
+    if (easterOpen) setTimeout(() => easterInput.focus(), 300);
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && !easterOpen && document.activeElement !== easterInput) {
+        e.preventDefault(); toggleEaster();
+    }
+    if (e.key === 'Escape' && easterOpen) toggleEaster();
+});
+
+easterInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const cmd = easterInput.value.trim().toLowerCase();
+        easterInput.value = '';
+        processEaster(cmd);
+    }
+});
+
+function addLine(html, cls = 'e-out') {
+    const d = document.createElement('div'); d.className = cls; d.innerHTML = html;
+    easterOutput.appendChild(d); easterOutput.scrollTop = easterOutput.scrollHeight;
+}
+
+function processEaster(cmd) {
+    addLine('<span style="color:var(--accent)">$</span> ' + cmd);
+    const cmds = {
+        help: () => {
+            addLine('Available commands:', 'e-ok');
+            ['  help       — show this message','  ls         — list sections','  skills     — jump to skills','  projects   — jump to projects','  whoami     — repeat intro','  clear      — clear terminal','  neofetch   — system info','  rm -rf /   — try it ;)'].forEach(l => addLine(l));
+        },
+        ls: () => addLine('about/  skills/  projects/  github/  contact/'),
+        skills: () => { document.getElementById('skills').scrollIntoView({ behavior:'smooth' }); addLine('Navigating to /skills/...','e-ok'); },
+        projects: () => { document.getElementById('projects').scrollIntoView({ behavior:'smooth' }); addLine('Navigating to /projects/...','e-ok'); },
+        whoami: () => { addLine('darsh dhawan','e-ok'); addLine('linux & networking administration'); },
+        clear: () => { easterOutput.innerHTML = '<div class="e-out">Terminal cleared.</div>'; },
+        neofetch: () => {
+            const lines = [
+                '<span style="color:var(--accent)">   ██████╗</span>   <span class="e-hl">darsh@portfolio</span>',
+                '<span style="color:var(--accent)">  ██╔════╝</span>   ──────────────────',
+                '<span style="color:var(--accent)">  ██║     </span>   <span class="e-hl">OS:</span> Kali/Debian (Home Lab)',
+                '<span style="color:var(--accent)">  ██║     </span>   <span class="e-hl">Focus:</span> Linux & Network Security',
+                '<span style="color:var(--accent)">  ╚██████╗</span>   <span class="e-hl">Lang:</span> Python, C',
+                '<span style="color:var(--accent)">   ╚═════╝</span>   <span class="e-hl">Tools:</span> Docker, Git, Apache',
+                '             <span class="e-hl">Lab:</span> <span style="color:var(--terminal-green)">● ACTIVE</span>'
+            ];
+            lines.forEach(l => addLine(l, 'e-ok'));
+        },
+        'rm -rf /': () => { addLine('Nice try.','e-err'); addLine('Permission denied. This is MY server.','e-err'); },
+    };
+    if (cmds[cmd]) cmds[cmd]();
+    else if (cmd) addLine('command not found: ' + cmd, 'e-err');
+}
+
+// ==============================
+// LIGHT MODE JOKE
+// ==============================
+function lightModeJoke() {
+    const m = ['No.','Absolutely not.','This is a dark place. Literally.','Light mode? In THIS economy?','Error: sanity check failed.',"I don't think so, chief."];
+    alert(m[Math.floor(Math.random() * m.length)]);
+}
+
+// ==============================
+// SMOOTH SCROLL
+// ==============================
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        const t = document.querySelector(this.getAttribute('href'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+
+// ==============================
+// CLEANUP SCAN LINE
+// ==============================
+setTimeout(() => { const s = document.getElementById('scan-line'); if (s) s.remove(); }, 2000);
+</script>
+
+</body>
+</html>
